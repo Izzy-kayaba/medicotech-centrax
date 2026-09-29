@@ -3,7 +3,7 @@ import {
   formatDate,
   summary
 } from './news-data.js';
-import { appendImages } from './article-images.js';
+import { appendImages, appendVideo } from './article-images.js';
 
 const grid = document.querySelector('#news-list');
 const status = document.querySelector('#news-status');
@@ -36,16 +36,20 @@ try {
 
     const images = document.createElement('div');
     images.className = 'news-images';
+    const video = document.createElement('div');
+    video.className = 'news-video';
     card.append(
       meta,
       title,
       excerpt,
       images,
+      video,
       link
     );
 
     grid.append(card);
     void appendImages(images, article);
+    void appendVideo(video, article.video);
   }
 
   status.textContent = articles.length

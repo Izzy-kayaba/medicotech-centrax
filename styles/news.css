@@ -23,6 +23,13 @@
 .news-images img + img {
   width: calc(50% - 4px);
 }
+.news-video video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--grey-100);
+}
 
 .card {
   display: flex;

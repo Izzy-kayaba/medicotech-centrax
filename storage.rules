@@ -5,15 +5,15 @@ service firebase.storage {
       return request.auth != null && request.auth.token.newsAdmin == true;
     }
     match /articles/{articleId}/{slot}/{version} {
-      allow read: if slot in ['image1', 'image2'];
+      allow read: if slot in ['image1', 'image2', 'video'];
       allow create: if editor() && resource == null
-        && slot in ['image1', 'image2']
+        && slot in ['image1', 'image2', 'video']
         && version.matches('[a-zA-Z0-9-]+')
         && request.resource.size > 0
-        && request.resource.size <= 5 * 1024 * 1024
-        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+        && ((slot in ['image1', 'image2'] && request.resource.size <= 5 * 1024 * 1024 && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'])
+          || (slot == 'video' && request.resource.size <= 50 * 1024 * 1024 && request.resource.contentType in ['video/mp4', 'video/webm']));
       // Unique versions protect published images when a save fails.
-      allow delete: if editor() && slot in ['image1', 'image2'];
+      allow delete: if editor() && slot in ['image1', 'image2', 'video'];
     }
     match /{path=**} { allow read, write: if false; }
   }

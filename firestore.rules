@@ -14,6 +14,10 @@ service cloud.firestore {
       );
     }
 
+    function video(path, id) {
+      return path == null || (path is string && path.matches('articles/' + id + '/video/[a-zA-Z0-9-]+'));
+    }
+
     function valid(id) {
       let d = request.resource.data;
 
@@ -35,6 +39,7 @@ service cloud.firestore {
           'status',
           'image1',
           'image2',
+          'video',
           'createdAt',
           'updatedAt',
           'category',
@@ -54,6 +59,7 @@ service cloud.firestore {
         && d.updatedAt == request.time
         && image(d.image1, id, 'image1')
         && image(d.image2, id, 'image2')
+        && (!('video' in d) || video(d.video, id))
         && (
           !('category' in d) ||
           (d.category is string && d.category.size() <= 100)

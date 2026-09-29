@@ -16,7 +16,7 @@ import {
 
 import { getFirebase } from './firebase-client.js';
 import { listArticles, formatDate } from './news-data.js';
-import { appendImages, clearImages, validateImage, saveOptionalImages, cleanupImages } from './article-images.js';
+import { appendImages, clearImages, validateImage, saveOptionalImages, cleanupImages, appendVideo, clearVideo, validateVideo, saveOptionalVideo } from './article-images.js';
 
 const $ = id => document.getElementById(id);
 const page = document.body.dataset.adminPage;
@@ -26,6 +26,7 @@ let editing = null;
 let busy = false;
 let dirty = false;
 const previewUrls = new Map();
+let videoPreviewUrl;
 
 function message(text, tone = 'info') {
   $('message').textContent = text;
@@ -99,6 +100,9 @@ function openEditor(article = null) {
     }
     $('image-status' + slot).textContent = article?.['image' + slot] ? 'Current image' : 'No image selected';
   }
+  $('remove-video').disabled = !article?.video;
+  $('video-status').textContent = article?.video ? 'Current video' : 'No video selected';
+  if (article?.video) void appendVideo($('video-preview'), article.video, { showUnavailable: true });
   $('title').focus();
 }
 
@@ -116,6 +120,9 @@ function resetImagePreviews() {
   for (const url of previewUrls.values()) URL.revokeObjectURL(url);
   previewUrls.clear();
   for (const slot of [1, 2]) clearImages($('preview' + slot));
+  if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
+  videoPreviewUrl = null;
+  clearVideo($('video-preview'));
 }
 
 async function refresh() {
@@ -142,7 +149,8 @@ async function refresh() {
     const imageCount = [article.image1, article.image2].filter(Boolean).length;
     const imageNote = document.createElement('span');
     imageNote.className = 'admin-image-count';
-    imageNote.textContent = imageCount ? `${imageCount} image${imageCount === 1 ? '' : 's'}` : 'Text only';
+    const mediaNotes = [imageCount ? `${imageCount} image${imageCount === 1 ? '' : 's'}` : '', article.video ? 'video' : ''].filter(Boolean);
+    imageNote.textContent = mediaNotes.join(' + ') || 'Text only';
     details.append(title, meta, imageNote, images);
 
     const actions = document.createElement('div');
@@ -217,7 +225,7 @@ async function deleteArticle(article) {
 
     message('Article deleted successfully.');
     // Image cleanup is independent of the completed deletion.
-    void cleanupImages([article.image1, article.image2]);
+    void cleanupImages([article.image1, article.image2, article.video]);
 
     await refreshAfterWrite();
   } catch (error) {
@@ -235,6 +243,7 @@ async function save(event) {
   setBusy(true);
   message('Saving article…');
   let imageResult;
+  let videoResult;
   let committed = false;
 
   try {
@@ -267,6 +276,7 @@ async function save(event) {
 
       image1: editing?.image1 || null,
       image2: editing?.image2 || null,
+      video: editing?.video || null,
 
       createdAt: editing?.createdAt || serverTimestamp(),
       updatedAt: serverTimestamp()
@@ -292,6 +302,8 @@ async function save(event) {
     if (selections.some(selection => selection.file)) message('Saving article and trying the optional images. Your text can still be saved if an image fails.');
     imageResult = await saveOptionalImages(reference.id, editing, selections);
     Object.assign(data, imageResult.images);
+    videoResult = await saveOptionalVideo(reference.id, editing, { file: $('video').files[0], remove: $('remove-video').checked });
+    data.video = videoResult.video;
 
     await runTransaction(services.db, async transaction => {
       const current = await transaction.get(reference);
@@ -317,16 +329,17 @@ async function save(event) {
       transaction.set(reference, data);
     });
     committed = true;
-    const oldPaths = [editing?.image1, editing?.image2].filter(path => path && path !== data.image1 && path !== data.image2);
+    const oldPaths = [editing?.image1, editing?.image2, editing?.video].filter(path => path && path !== data.image1 && path !== data.image2 && path !== data.video);
     closeEditor();
-    const warning = imageResult.warnings.join(' ');
+    const warning = [...imageResult.warnings, ...videoResult.warnings].join(' ');
     message('Article published successfully. ' + (warning || 'It is now available on the News page.'), warning ? 'warning' : 'success');
     // No waiting for image deletion before showing the saved article.
-    void cleanupImages([...oldPaths, ...imageResult.abandoned]);
+    void cleanupImages([...oldPaths, ...imageResult.abandoned, ...videoResult.abandoned]);
 
     await refreshAfterWrite();
   } catch (error) {
     if (!committed && imageResult?.uploaded.length) void cleanupImages(imageResult.uploaded);
+    if (!committed && videoResult?.uploaded.length) void cleanupImages(videoResult.uploaded);
     message(errorMessage(error), 'error');
   } finally {
     setBusy(false);
@@ -396,6 +409,36 @@ function wireDashboard() {
       if (!$('remove' + slot).checked && existing) void appendImages($('preview' + slot), { title: editing.title, image1: existing }, { showUnavailable: true });
     };
   }
+
+  $('video').onchange = () => {
+    dirty = true;
+    const file = $('video').files[0];
+    if (!file) return;
+    clearVideo($('video-preview'));
+    if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
+    try {
+      validateVideo(file);
+      videoPreviewUrl = URL.createObjectURL(file);
+      const player = document.createElement('video');
+      player.controls = true;
+      player.playsInline = true;
+      player.preload = 'metadata';
+      player.src = videoPreviewUrl;
+      $('video-preview').append(player);
+      $('video-preview').hidden = false;
+      $('remove-video').checked = false;
+      $('video-status').textContent = file.name + ' — ready to upload when you save';
+    } catch (error) {
+      $('video-status').textContent = error.message + ' Your article can still be saved; this video will be skipped.';
+    }
+  };
+  $('remove-video').onchange = () => {
+    dirty = true;
+    $('video').value = '';
+    clearVideo($('video-preview'));
+    $('video-status').textContent = $('remove-video').checked ? 'Video will be removed when you save.' : (editing?.video ? 'Current video' : 'No video selected');
+    if (!$('remove-video').checked && editing?.video) void appendVideo($('video-preview'), editing.video, { showUnavailable: true });
+  };
 
   window.addEventListener('beforeunload', event => {
     if (dirty || busy) {

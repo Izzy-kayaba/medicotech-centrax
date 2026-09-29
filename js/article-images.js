@@ -3,6 +3,8 @@ import { firebaseConfig, useEmulators } from './firebase-config.js';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const IMAGE_TIMEOUT = 15000;
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+const VIDEO_TIMEOUT = 120000;
 let storagePromise;
 
 // Image services are loaded only when needed. Text articles and login do not
@@ -36,6 +38,11 @@ export function validateImage(file) {
   if (!file.size || file.size > MAX_BYTES) throw new Error('Choose an image smaller than 5 MB.');
 }
 
+export function validateVideo(file) {
+  if (!['video/mp4', 'video/webm'].includes(file.type)) throw new Error('Choose an MP4 or WebM video.');
+  if (!file.size || file.size > MAX_VIDEO_BYTES) throw new Error('Choose a video no larger than 50 MB.');
+}
+
 async function uploadImage(path, file) {
   validateImage(file);
   const bitmap = await within(createImageBitmap(file));
@@ -66,6 +73,22 @@ export async function saveOptionalImages(articleId, previous, selections) {
   return { images: Object.fromEntries(results), uploaded, warnings, abandoned };
 }
 
+export async function saveOptionalVideo(articleId, previous, { file, remove }) {
+  const existing = previous?.video || null;
+  if (!file) return { video: remove ? null : existing, uploaded: [], warnings: [], abandoned: [] };
+  const path = `articles/${articleId}/video/${crypto.randomUUID()}`;
+  try {
+    validateVideo(file);
+    const { sdk, storage } = await imageServices();
+    const task = sdk.uploadBytesResumable(sdk.ref(storage, path), file, { contentType: file.type });
+    const timer = setTimeout(() => task.cancel(), VIDEO_TIMEOUT);
+    try { await within(task, VIDEO_TIMEOUT); } finally { clearTimeout(timer); }
+    return { video: path, uploaded: [path], warnings: [], abandoned: [] };
+  } catch (error) {
+    return { video: existing, uploaded: [], warnings: [`Video upload failed (${error.message}). ${existing ? 'The previous video was kept.' : 'No video was added.'}`], abandoned: [path] };
+  }
+}
+
 // Cleanup is always best-effort and never changes the article's save result.
 export async function cleanupImages(paths) {
   const unique = [...new Set(paths.filter(Boolean))];
@@ -81,6 +104,48 @@ export function clearImages(container) {
   container.dataset.imageRequest = crypto.randomUUID();
   container.replaceChildren();
   container.hidden = true;
+}
+
+export function clearVideo(container) {
+  container.dataset.videoRequest = crypto.randomUUID();
+  container.replaceChildren();
+  container.hidden = true;
+}
+
+export async function appendVideo(container, path, { showUnavailable = false } = {}) {
+  clearVideo(container);
+  if (!path) return;
+  const request = container.dataset.videoRequest;
+  try {
+    const { sdk, storage } = await imageServices();
+    const url = await within(sdk.getDownloadURL(sdk.ref(storage, path)));
+    if (container.dataset.videoRequest !== request) return;
+    const video = document.createElement('video');
+    video.controls = true;
+    video.playsInline = true;
+    video.preload = 'metadata';
+    video.src = url;
+    video.onerror = () => {
+      if (container.dataset.videoRequest !== request) return;
+      clearVideo(container);
+      if (showUnavailable) {
+        const note = document.createElement('p');
+        note.className = 'image-unavailable';
+        note.textContent = 'Video preview unavailable. You can keep, replace or remove the saved video.';
+        container.append(note);
+        container.hidden = false;
+      }
+    };
+    container.append(video);
+    container.hidden = false;
+  } catch {
+    if (!showUnavailable || container.dataset.videoRequest !== request) return;
+    const note = document.createElement('p');
+    note.className = 'image-unavailable';
+    note.textContent = 'Video preview unavailable. You can keep, replace or remove the saved video.';
+    container.append(note);
+    container.hidden = false;
+  }
 }
 
 // Metadata lookup errors AND browser image load errors are isolated per image.
