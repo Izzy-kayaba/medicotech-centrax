@@ -79,6 +79,22 @@
   aspect-ratio: 16 / 8;
   object-fit: cover;
 }
+.article-video {
+  overflow: hidden;
+  margin-top: clamp(24px, 4vw, 48px);
+  border-radius: 14px;
+  background: var(--grey-100);
+  box-shadow: var(--shadow);
+}
+.article-video video {
+  display: block;
+  width: 100%;
+  max-height: 620px;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: #000;
+}
+.article-video[hidden] { display: none; }
 
 .article-layout {
   display: grid;

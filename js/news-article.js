@@ -4,9 +4,16 @@
   summary,
   renderContent
 } from './news-data.js';
-import { appendImages } from './article-images.js';
+import { appendImages, appendVideo } from './article-images.js';
 
 const $ = id => document.getElementById(id);
+if (!$('article-video')) {
+  const video = document.createElement('figure');
+  video.className = 'container article-video';
+  video.id = 'article-video';
+  video.hidden = true;
+  $('article-image').after(video);
+}
 
 try {
   const article = await getArticle(
@@ -43,6 +50,7 @@ try {
 
     // Images load independently; their failure never hides the article text.
     void appendImages($('article-image'), article);
+    void appendVideo($('article-video'), article.video);
 
     if (
       article.action &&

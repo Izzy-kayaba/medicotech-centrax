@@ -41,7 +41,7 @@
           <div class="admin-panel-heading">
             <div>
               <h2 id="editor-heading">New article</h2>
-              <p>Write your story below. Images are always optional.</p>
+              <p>Write your story below. Images and video are optional.</p>
             </div><span class="admin-status-pill">Publishes on save</span>
           </div>
           <form id="article-form">
@@ -89,6 +89,17 @@
                 </div>
               </section>
               <div class="admin-editor-actions">
+                </div>
+                <section class=admin-images-section aria-labelledby=video-heading>
+                  <div class=admin-subheading><h3 id=video-heading>Article video <span>Optional</span></h3><p class=admin-help>One video · MP4 or WebM · up to 50 MB</p></div>
+                  <div class=admin-image-card><label for=video>Video file</label>
+                    <div id=video-preview class=admin-preview hidden></div>
+                    <input id=video type=file accept=video/mp4,video/webm aria-describedby=video-status>
+                    <p id=video-status class=admin-help role=status>No video selected</p>
+                    <label class=checkbox-label><input id=remove-video type=checkbox> Remove current video</label>
+                  </div>
+                </section>
+                <div class=admin-editor-actions>
                 <p>Changes go live when you save. There is no automatic saving.</p>
                 <div class="button-row"><button id="cancel" class="admin-secondary" type="button">Cancel</button><button
                     class="button" type="submit"><span id="save-label">Save / Publish</span></button></div>
